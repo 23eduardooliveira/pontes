@@ -1,4 +1,3 @@
-// Pega as dependências globais
 const { useState, useEffect, useMemo } = React;
 const Motion = window.Motion || { motion: { div: 'div', button: 'button' }, AnimatePresence: ({children}) => children };
 const { motion, AnimatePresence } = Motion;
@@ -24,7 +23,6 @@ function AuthScreen() {
     try {
       if (isRegistering) {
         await createUserWithEmailAndPassword(auth, email, password);
-        // O App detectará o login e, como não tem nome, jogará para a tela de Apelido
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
@@ -33,7 +31,7 @@ function AuthScreen() {
       let msg = "Erro na conexão.";
       if (err.code === "auth/invalid-credential") msg = "E-mail ou senha incorretos.";
       if (err.code === "auth/email-already-in-use") msg = "E-mail já cadastrado.";
-      if (err.code === "auth/weak-password") msg = "A senha deve ter pelo menos 6 caracteres.";
+      if (err.code === "auth/weak-password") msg = "Senha muito fraca (mínimo 6 dígitos).";
       setError(msg);
     } finally {
       setLoading(false);
@@ -41,33 +39,43 @@ function AuthScreen() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#1e1e1e]">
-      <div className="w-full max-w-sm bg-[#252525] p-6 rounded-lg border border-zinc-700 shadow-xl">
-        <h1 className="text-2xl font-bold text-center text-indigo-500 mb-6">{isRegistering ? "Criar Conta" : "Login"}</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }} 
+        animate={{ opacity: 1, scale: 1 }} 
+        className="card w-full max-w-sm p-8"
+      >
+        <h1 className="text-3xl font-bold text-center mb-6 text-gradient">
+            {isRegistering ? "Criar Conta" : "Bem-vindo"}
+        </h1>
+        
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="text-xs text-zinc-400">E-mail</label>
-            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-[#1a1a1a] p-2 rounded border border-zinc-700 text-white outline-none focus:border-indigo-500"/>
+            <label className="block text-xs text-zinc-400 mb-1 ml-1">E-mail</label>
+            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="input-neon"/>
           </div>
           <div>
-            <label className="text-xs text-zinc-400">Senha</label>
-            <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-[#1a1a1a] p-2 rounded border border-zinc-700 text-white outline-none focus:border-indigo-500"/>
+            <label className="block text-xs text-zinc-400 mb-1 ml-1">Senha</label>
+            <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="input-neon"/>
           </div>
-          {error && <div className="text-red-400 text-xs text-center">{error}</div>}
-          <button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded disabled:opacity-50">
-            {loading ? "Carregando..." : (isRegistering ? "Cadastrar" : "Entrar")}
+          
+          {error && <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-red-300 text-xs text-center">{error}</div>}
+          
+          <button type="submit" disabled={loading} className="btn-primary w-full shadow-lg shadow-indigo-500/20">
+            {loading ? <span className="animate-pulse">Processando...</span> : (isRegistering ? "Cadastrar" : "Entrar")}
           </button>
         </form>
-        <button onClick={() => setIsRegistering(!isRegistering)} className="block w-full text-center mt-4 text-xs text-zinc-400 hover:text-white underline">
-          {isRegistering ? "Já tenho conta. Login." : "Não tem conta? Cadastrar."}
+        
+        <button onClick={() => setIsRegistering(!isRegistering)} className="block w-full text-center mt-6 text-xs text-zinc-400 hover:text-white transition-colors">
+          {isRegistering ? "Já tem conta? Faça Login." : "Não tem conta? Crie uma agora."}
         </button>
-      </div>
+      </motion.div>
     </div>
   );
 }
 
 // =====================
-// TELA 2: ESCOLHER APELIDO (NOVO)
+// TELA 2: ESCOLHER APELIDO
 // =====================
 function NicknameScreen({ user, onSave }) {
     const [nick, setNick] = useState("");
@@ -78,22 +86,24 @@ function NicknameScreen({ user, onSave }) {
         if(!nick.trim()) return;
         setLoading(true);
         try {
-            // Atualiza o perfil no Firebase
             await window.Firebase.updateProfile(user, { displayName: nick });
-            // Avisa o app que salvou
             onSave(nick);
         } catch (error) {
-            console.error("Erro ao salvar nome:", error);
+            console.error("Erro:", error);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-[#1e1e1e]">
-          <div className="w-full max-w-sm bg-[#252525] p-6 rounded-lg border border-zinc-700 shadow-xl text-center">
-            <h1 className="text-2xl font-bold text-amber-500 mb-2">Bem-vindo! 👋</h1>
-            <p className="text-zinc-400 text-sm mb-6">Como você quer ser chamado no Board?</p>
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ y: 20, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }}
+            className="card w-full max-w-sm p-8 text-center"
+          >
+            <h1 className="text-2xl font-bold mb-2 text-gradient">Como devemos te chamar?</h1>
+            <p className="text-zinc-400 text-sm mb-8">Escolha um apelido para aparecer no ranking.</p>
             
             <form onSubmit={handleSave} className="space-y-4">
               <input 
@@ -103,22 +113,21 @@ function NicknameScreen({ user, onSave }) {
                 required 
                 value={nick} 
                 onChange={e => setNick(e.target.value)} 
-                className="w-full bg-[#1a1a1a] p-3 rounded border border-zinc-700 text-white outline-none focus:border-amber-500 text-center text-lg"
+                className="input-neon text-center text-lg"
+                maxLength={15}
               />
-              <button type="submit" disabled={loading} className="w-full bg-amber-600 hover:bg-amber-500 text-black font-bold py-2 rounded disabled:opacity-50">
-                {loading ? "Salvando..." : "Começar"}
+              <button type="submit" disabled={loading} className="btn-primary w-full">
+                {loading ? "Salvando..." : "Começar a Usar"}
               </button>
             </form>
-          </div>
+          </motion.div>
         </div>
     );
 }
 
 // =====================
-// APP PRINCIPAL
+// APP PRINCIPAL (ONLINE)
 // =====================
-
-const MOCK_USERS_BASE = [{ id: "sys", name: "Sistema" }];
 
 // Helpers
 const scoreFromVotes = (votes) => Object.values(votes || {}).reduce((acc, arr) => acc + arr.reduce((a, b) => a + b, 0), 0);
@@ -129,50 +138,25 @@ const userBoostUsed = (votes, userId) => (votes?.[userId] || []).length > 1;
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
-  const [users, setUsers] = useState(MOCK_USERS_BASE);
   const [boards, setBoards] = useState([]); 
-  const [activeBoardId, setActiveBoardId] = useState("b1");
-  const [editingBoardId, setEditingBoardId] = useState(null);
+  const [activeBoardId, setActiveBoardId] = useState(null);
   const [activeTab, setActiveTab] = useState("pending");
-  const [usersPanelOpen, setUsersPanelOpen] = useState(true);
-  const [suggestions, setSuggestions] = useState({ b1: [] });
+  const [suggestions, setSuggestions] = useState([]);
   const [newText, setNewText] = useState("");
   const [newImage, setNewImage] = useState(null);
-  const [economy, setEconomy] = useState({ b1: { fragmentos: 0, boosts: 0 } });
   const [confirmBoost, setConfirmBoost] = useState(null);
+  
+  // Controle de UI
+  const [usersPanelOpen, setUsersPanelOpen] = useState(false);
+  const [editingBoardId, setEditingBoardId] = useState(null);
 
-  // 1. Inicializar Firebase
+  // Inicialização (Firebase Auth)
   useEffect(() => {
     const initAuth = () => {
         if (!window.Firebase) return;
         const { auth, onAuthStateChanged } = window.Firebase;
-        
         onAuthStateChanged(auth, (user) => {
-            if (user) {
-                // Ao carregar, verifica se já tem nome. Se não, o componente NicknameScreen vai cuidar.
-                setCurrentUser(user);
-                
-                // Se já tiver nome, adiciona à lista
-                if (user.displayName) {
-                    setUsers(prev => {
-                        if (prev.find(u => u.id === user.uid)) return prev;
-                        return [...prev, { id: user.uid, name: user.displayName }];
-                    });
-                }
-
-                setBoards(b => {
-                    if (b.length === 0) {
-                        const defId = "b1";
-                        setActiveBoardId(defId);
-                        setEconomy(e => ({...e, [defId]: {fragmentos:0, boosts:0}}));
-                        setSuggestions(s => ({...s, [defId]: []}));
-                        return [{ id: defId, name: "Geral", archived: false, adminId: user.uid }];
-                    }
-                    return b;
-                });
-            } else {
-                setCurrentUser(null);
-            }
+            setCurrentUser(user ? user : null);
             setAuthReady(true);
         });
     };
@@ -180,211 +164,285 @@ function App() {
     else window.addEventListener('firebase-ready', initAuth);
   }, []);
 
-  const handleLogout = () => window.Firebase && window.Firebase.signOut(window.Firebase.auth);
-
-  // Callback quando o usuário salva o apelido
-  const handleNicknameSaved = (newName) => {
-      // Força a atualização do estado do usuário localmente
-      const updatedUser = { ...currentUser, displayName: newName };
-      setCurrentUser(updatedUser);
-      setUsers(prev => [...prev, { id: updatedUser.uid, name: newName }]);
-  };
-
+  // Sincronização em Tempo Real (FIRESTORE - BOARDS)
   useEffect(() => {
-    if (!activeBoardId) return;
-    const e = economy[activeBoardId];
-    if (!e) return;
-    if (e.fragmentos >= 10) {
-      setEconomy((prev) => ({
-        ...prev,
-        [activeBoardId]: { fragmentos: e.fragmentos % 10, boosts: e.boosts + Math.floor(e.fragmentos / 10) }
-      }));
-    }
-  }, [economy, activeBoardId]);
+    if (!currentUser || !window.Firebase) return;
+    const { db, collection, onSnapshot, query, orderBy } = window.Firebase;
+    
+    // Carrega Boards
+    const q = query(collection(db, "boards"), orderBy("createdAt", "asc"));
+    const unsub = onSnapshot(q, (snapshot) => {
+        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setBoards(list);
+        // Seleciona o primeiro board se nenhum estiver ativo
+        if (list.length > 0 && !activeBoardId) {
+             setActiveBoardId(list[0].id);
+        }
+    });
+    return () => unsub();
+  }, [currentUser, activeBoardId]);
+
+  // Sincronização em Tempo Real (FIRESTORE - SUGESTÕES)
+  useEffect(() => {
+    if (!activeBoardId || !window.Firebase) return;
+    const { db, collection, onSnapshot, query, orderBy } = window.Firebase;
+
+    // Carrega Sugestões do Board Ativo
+    // Nota: Em produção real, filtraríamos "where('boardId', '==', activeBoardId)"
+    // Aqui vamos carregar tudo e filtrar no cliente por simplicidade de setup do index
+    const q = query(collection(db, "suggestions"), orderBy("createdAt", "desc"));
+    
+    const unsub = onSnapshot(q, (snapshot) => {
+        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Filtra apenas as do board atual
+        setSuggestions(list.filter(s => s.boardId === activeBoardId));
+    });
+    return () => unsub();
+  }, [activeBoardId]);
+
+
+  const handleLogout = () => window.Firebase && window.Firebase.signOut(window.Firebase.auth);
+  const handleNicknameSaved = (newName) => setCurrentUser({...currentUser, displayName: newName});
 
   const currentUserId = currentUser ? currentUser.uid : null;
   const activeBoard = boards.find((b) => b.id === activeBoardId);
-  const currentSuggestions = suggestions[activeBoardId] || [];
-
-  const usersByActivity = useMemo(() => {
-    const activity = {};
-    currentSuggestions.forEach((s) => {
-      Object.keys(s.votes || {}).forEach((uid) => { activity[uid] = Math.max(activity[uid] || 0, new Date(s.createdAt).getTime()); });
-    });
-    return [...users].sort((a, b) => (activity[b.id] || 0) - (activity[a.id] || 0));
-  }, [users, currentSuggestions]);
-
-  // ==========================
-  // ROTEAMENTO DE TELAS
-  // ==========================
-  
-  // 1. Carregando
-  if (!authReady) return <div className="h-screen flex items-center justify-center text-zinc-500 bg-[#1e1e1e]">Conectando...</div>;
-  
-  // 2. Não Logado -> Auth
-  if (!currentUser) return <AuthScreen />;
-
-  // 3. Logado mas sem Apelido -> Nickname
-  if (!currentUser.displayName) return <NicknameScreen user={currentUser} onSave={handleNicknameSaved} />;
-
-  // 4. App Principal (Proteção Board)
-  if (!activeBoard && boards.length > 0) setActiveBoardId(boards[0].id);
-
-  const isArchivedBoard = activeBoard?.archived;
   const isAdmin = activeBoard?.adminId === currentUserId;
+  const isArchivedBoard = activeBoard?.archived;
 
-  // Lógica de ações (Mantida igual)
-  const createBoard = () => {
-    const id = crypto.randomUUID();
-    setBoards((b) => [...b, { id, name: "Novo Board", archived: false, adminId: currentUserId }]);
-    setSuggestions((s) => ({ ...s, [id]: [] }));
-    setEconomy((e) => ({ ...e, [id]: { fragmentos: 0, boosts: 0 } }));
-    setActiveBoardId(id);
+  // --- Ações do Banco de Dados ---
+
+  const createBoard = async () => {
+    const name = prompt("Nome do novo Board:");
+    if (!name) return;
+    const { db, collection, addDoc } = window.Firebase;
+    await addDoc(collection(db, "boards"), {
+        name: name,
+        adminId: currentUserId,
+        archived: false,
+        createdAt: new Date().toISOString(),
+        boosts: 0, // Economia global do board
+        fragmentos: 0
+    });
   };
 
-  const renameBoard = (id, name) => {
-    setBoards((b) => b.map((bd) => (bd.id === id ? { ...bd, name } : bd)));
-    setEditingBoardId(null);
+  const renameBoard = async (id, newName) => {
+     const { db, doc, updateDoc } = window.Firebase;
+     await updateDoc(doc(db, "boards", id), { name: newName });
+     setEditingBoardId(null);
   };
 
-  const archiveBoard = (id) => {
-    const board = boards.find((b) => b.id === id);
-    if (!board || board.adminId !== currentUserId) return;
-    setBoards((b) => b.map((bd) => (bd.id === id ? { ...bd, archived: true } : bd)));
+  const archiveBoard = async (id, status) => {
+     const { db, doc, updateDoc } = window.Firebase;
+     await updateDoc(doc(db, "boards", id), { archived: status });
   };
 
-  const unarchiveBoard = (id) => {
-    const board = boards.find((b) => b.id === id);
-    if (!board || board.adminId !== currentUserId) return;
-    setBoards((b) => b.map((bd) => (bd.id === id ? { ...bd, archived: false } : bd)));
-    setActiveBoardId(id);
-  };
-
-  const createSuggestion = () => {
-    if (isArchivedBoard) return;
-    if (!newText.trim() && !newImage) return;
-    setSuggestions((prev) => ({
-      ...prev,
-      [activeBoardId]: [
-        ...(prev[activeBoardId] || []),
-        { id: crypto.randomUUID(), author: currentUserId, createdAt: new Date().toISOString(), content: { text: newText, image: newImage }, votes: {} }
-      ]
-    }));
+  const createSuggestion = async () => {
+    if (isArchivedBoard || (!newText.trim() && !newImage)) return;
+    const { db, collection, addDoc } = window.Firebase;
+    
+    await addDoc(collection(db, "suggestions"), {
+        boardId: activeBoardId,
+        author: currentUserId,
+        authorName: currentUser.displayName || "Anônimo",
+        content: { text: newText, image: newImage }, // Nota: Imagem como URL blob só funciona localmente por enquanto. Em prod precisa de Storage.
+        votes: {}, // { userId: [1, -1] }
+        createdAt: new Date().toISOString()
+    });
     setNewText(""); setNewImage(null);
   };
 
-  const voteInitial = (id, value) => {
+  const voteInitial = async (id, value) => {
     if (isArchivedBoard) return;
-    setSuggestions((prev) => ({
-      ...prev,
-      [activeBoardId]: prev[activeBoardId].map((s) => {
-        if (s.id !== id) return s;
-        if (s.author === currentUserId) return s;
-        if (userHasVoted(s.votes, currentUserId)) return s;
-        setEconomy((e) => ({ ...e, [activeBoardId]: { ...e[activeBoardId], fragmentos: (e[activeBoardId]?.fragmentos || 0) + 1 } }));
-        return { ...s, votes: { ...s.votes, [currentUserId]: [value] } };
-      })
-    }));
-  };
+    const { db, doc, updateDoc } = window.Firebase;
+    const s = suggestions.find(item => item.id === id);
+    if (!s) return;
 
-  const applyBoost = (id) => {
-    if (isArchivedBoard) return;
-    const boardEco = economy[activeBoardId];
-    if (!boardEco || boardEco.boosts <= 0) return;
-    setSuggestions((prev) => ({
-      ...prev,
-      [activeBoardId]: prev[activeBoardId].map((s) => {
-        if (s.id !== id) return s;
-        const userVotes = s.votes[currentUserId] || [];
-        if (userBoostUsed(s.votes, currentUserId)) return s;
-        let appliedValue = 1;
-        if (s.author !== currentUserId) {
-             const lastVote = userVotes[userVotes.length - 1];
-             if (lastVote === 0) {
-                 const score = scoreFromVotes(s.votes);
-                 appliedValue = score > 0 ? -1 : score < 0 ? 1 : 0;
-             } else if (typeof lastVote === "number") appliedValue = lastVote;
+    // Lógica simples: adiciona voto. 
+    // Em app real, idealmente usaríamos transações ou Cloud Functions para segurança
+    const newVotes = { ...s.votes, [currentUserId]: [value] };
+    
+    // Atualiza sugestão
+    await updateDoc(doc(db, "suggestions", id), { votes: newVotes });
+    
+    // Atualiza economia do Board (Fragmentos)
+    // Se for o primeiro voto deste usuário nesta sugestão...
+    if (!userHasVoted(s.votes, currentUserId)) {
+        const boardRef = doc(db, "boards", activeBoardId);
+        // Atualização otimista simples
+        let newFrag = (activeBoard.fragmentos || 0) + 1;
+        let newBoost = activeBoard.boosts || 0;
+        if (newFrag >= 10) {
+            newFrag = 0;
+            newBoost += 1;
         }
-        setEconomy((e) => ({ ...e, [activeBoardId]: { fragmentos: e[activeBoardId].fragmentos, boosts: e[activeBoardId].boosts - 1 } }));
-        return { ...s, votes: { ...s.votes, [currentUserId]: [...userVotes, appliedValue] }, _boosted: true };
-      })
-    }));
+        await updateDoc(boardRef, { fragmentos: newFrag, boosts: newBoost });
+    }
   };
 
-  const pending = currentSuggestions.filter((s) => !userHasVoted(s.votes, currentUserId) && s.author !== currentUserId);
-  const review = currentSuggestions.filter((s) => userHasVoted(s.votes, currentUserId) || s.author === currentUserId);
-  const ranked = currentSuggestions.filter((s) => votedCount(s.votes, s.author) >= 1).sort((a, b) => scoreFromVotes(b.votes) - scoreFromVotes(a.votes));
+  const applyBoost = async (id) => {
+    if (isArchivedBoard || (activeBoard.boosts || 0) <= 0) return;
+    const { db, doc, updateDoc } = window.Firebase;
+    const s = suggestions.find(item => item.id === id);
+    if (!s) return;
+
+    const userVotes = s.votes[currentUserId] || [];
+    if (userBoostUsed(s.votes, currentUserId)) return;
+
+    // Calcula valor do boost
+    let appliedValue = 1;
+    if (s.author !== currentUserId) {
+        const lastVote = userVotes[userVotes.length - 1];
+        if (typeof lastVote === "number") appliedValue = lastVote;
+    }
+
+    // Atualiza Sugestão
+    const newVotes = { ...s.votes, [currentUserId]: [...userVotes, appliedValue] };
+    await updateDoc(doc(db, "suggestions", id), { votes: newVotes });
+
+    // Consome Boost do Board
+    await updateDoc(doc(db, "boards", activeBoardId), { boosts: (activeBoard.boosts - 1) });
+  };
+
+  // --- Filtros de Visualização ---
+  const pending = suggestions.filter((s) => !userHasVoted(s.votes, currentUserId) && s.author !== currentUserId);
+  const review = suggestions.filter((s) => userHasVoted(s.votes, currentUserId) || s.author === currentUserId);
+  const ranked = suggestions.filter((s) => votedCount(s.votes, s.author) >= 1).sort((a, b) => scoreFromVotes(b.votes) - scoreFromVotes(a.votes));
+
+
+  // ROTEAMENTO
+  if (!authReady) return <div className="h-screen flex items-center justify-center text-zinc-500">Conectando ao banco de dados...</div>;
+  if (!currentUser) return <AuthScreen />;
+  if (!currentUser.displayName) return <NicknameScreen user={currentUser} onSave={handleNicknameSaved} />;
 
   return (
-    <div className="min-h-screen text-zinc-200 p-4 max-w-md mx-auto flex gap-3 bg-[#1e1e1e]">
-      {/* SIDEBAR */}
-      <div className={`bg-[#1a1a1a] rounded p-2 transition-all ${usersPanelOpen ? "w-28" : "w-8"}`}>
-        <button className="text-xs text-zinc-400 mb-2 w-full text-left" onClick={() => setUsersPanelOpen((v) => !v)}>👥</button>
-        {usersPanelOpen && (
-          <div className="space-y-1">
-             <div className="text-[10px] text-zinc-500 mb-1 border-b border-zinc-700 pb-1 break-words">
-                {currentUser.displayName || currentUser.email.split('@')[0]}
-             </div>
-            {usersByActivity.map((u) => (
-              <div key={u.id} className="flex items-center gap-1 text-xs truncate"><span>{u.name}</span>{activeBoard?.adminId === u.id && "⭐"}</div>
-            ))}
-             <button onClick={handleLogout} className="mt-4 text-[10px] text-red-400 border border-red-900 rounded px-1 w-full hover:bg-red-900/20">Sair</button>
-          </div>
-        )}
-      </div>
-
-      {/* AREA PRINCIPAL */}
-      <div className="flex-1 min-w-0">
+    <div className="min-h-screen p-2 md:p-6 max-w-4xl mx-auto flex flex-col md:flex-row gap-6">
+      
+      {/* SIDEBAR (Perfil) */}
+      <motion.div 
+        layout
+        className={`card p-4 flex flex-col gap-2 transition-all duration-300 ${usersPanelOpen ? "md:w-64" : "md:w-16"} ${usersPanelOpen ? "h-auto" : "h-fit"}`}
+      >
+        <button 
+            className="text-zinc-400 hover:text-white flex items-center gap-2 mb-2" 
+            onClick={() => setUsersPanelOpen(!usersPanelOpen)}
+        >
+            <span className="text-xl">👥</span>
+            {usersPanelOpen && <span className="text-sm font-bold">Menu</span>}
+        </button>
         
-        {/* NAV BOARDS */}
-        <div className="flex gap-2 mb-3 overflow-x-auto pb-2 scrollbar-thin">
-          {boards.length === 0 && <span className="text-xs text-zinc-500 p-1">Sem boards...</span>}
+        {usersPanelOpen && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-2">
+             <div className="bg-white/5 p-2 rounded text-sm border border-white/10 mb-2">
+                <div className="text-xs text-zinc-500 uppercase">Logado como</div>
+                <div className="font-bold text-indigo-400 truncate">{currentUser.displayName}</div>
+             </div>
+             <button onClick={handleLogout} className="mt-4 text-xs text-red-400 border border-red-900/50 rounded p-2 hover:bg-red-900/20 w-full transition-colors">
+                Sair
+             </button>
+          </motion.div>
+        )}
+      </motion.div>
+
+      {/* ÁREA PRINCIPAL */}
+      <div className="flex-1 min-w-0 flex flex-col gap-4">
+        
+        {/* Barra de Navegação de Boards */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+          {boards.length === 0 && <span className="text-xs text-zinc-500">Nenhum board. Crie um (+)</span>}
           {boards.filter((b) => !b.archived).map((b) => (
-            <button key={b.id} onClick={() => setActiveBoardId(b.id)} className={`px-3 py-1 rounded text-sm whitespace-nowrap ${b.id === activeBoardId ? "bg-indigo-600" : "bg-[#2b2b2b]"}`}>
+            <button 
+                key={b.id} 
+                onClick={() => setActiveBoardId(b.id)} 
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${b.id === activeBoardId ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : "bg-white/5 text-zinc-400 hover:bg-white/10"}`}
+            >
                 {b.name}
             </button>
           ))}
-          <button onClick={createBoard} className="px-2 py-1 bg-green-600 rounded whitespace-nowrap font-bold">+</button>
+          <button onClick={createBoard} className="w-8 h-8 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-600/50 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center font-bold flex-shrink-0">+</button>
         </div>
 
-        {/* HEADER */}
+        {/* Header do Board */}
         {activeBoard ? (
-            <header className="mb-4 space-y-1">
-                {editingBoardId === activeBoard.id ? (
-                    <input autoFocus className="bg-[#252525] p-1 rounded text-sm text-white w-full border border-indigo-500 outline-none" defaultValue={activeBoard.name} onBlur={(e) => renameBoard(activeBoard.id, e.target.value)} onKeyDown={(e) => e.key === "Enter" && renameBoard(activeBoard.id, e.target.value)} />
-                ) : (
-                    <h1 className="text-lg font-semibold cursor-pointer hover:text-indigo-400" onClick={() => isAdmin && setEditingBoardId(activeBoard.id)}>{activeBoard.name} {isAdmin && "✎"}</h1>
-                )}
-                <div className="flex justify-between items-center text-xs text-zinc-400">
-                    <div>🧩 {economy[activeBoardId]?.fragmentos || 0} · ⚡ {economy[activeBoardId]?.boosts || 0}</div>
-                    {isAdmin && !isArchivedBoard && <button onClick={() => archiveBoard(activeBoard.id)} className="hover:text-red-400">Arquivar</button>}
-                    {isAdmin && isArchivedBoard && <button onClick={() => unarchiveBoard(activeBoard.id)} className="text-green-400">Desarquivar</button>}
+            <motion.div 
+                key={activeBoardId}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="card p-4 md:p-6"
+            >
+                <header className="flex flex-wrap justify-between items-start gap-4 mb-6 border-b border-white/5 pb-4">
+                    <div className="flex-1">
+                        {editingBoardId === activeBoard.id ? (
+                            <input autoFocus className="input-neon text-xl font-bold" defaultValue={activeBoard.name} onBlur={(e) => renameBoard(activeBoard.id, e.target.value)} onKeyDown={(e) => e.key === "Enter" && renameBoard(activeBoard.id, e.target.value)} />
+                        ) : (
+                            <h1 className="text-2xl font-bold cursor-pointer hover:text-indigo-400 flex items-center gap-2" onClick={() => isAdmin && setEditingBoardId(activeBoard.id)}>
+                                {activeBoard.name} 
+                                {isAdmin && <span className="text-xs opacity-50">✎</span>}
+                            </h1>
+                        )}
+                    </div>
+                    
+                    <div className="flex items-center gap-4 bg-black/20 p-2 rounded-lg border border-white/5">
+                        <div className="text-center px-2">
+                            <div className="text-xs text-zinc-500 uppercase font-bold">Fragmentos</div>
+                            <div className="text-lg font-mono text-emerald-400">{activeBoard.fragmentos || 0}</div>
+                        </div>
+                        <div className="w-px h-8 bg-white/10"></div>
+                        <div className="text-center px-2">
+                            <div className="text-xs text-zinc-500 uppercase font-bold">Boosts</div>
+                            <div className="text-lg font-mono text-amber-400">⚡ {activeBoard.boosts || 0}</div>
+                        </div>
+                    </div>
+                </header>
+                
+                {/* Abas e Filtros */}
+                <div className="flex gap-2 mb-6 bg-black/20 p-1 rounded-lg">
+                  <Tab label="Votar" icon="⏳" active={activeTab === "pending"} onClick={() => setActiveTab("pending")} />
+                  <Tab label="Meus" icon="📝" active={activeTab === "review"} onClick={() => setActiveTab("review")} />
+                  <Tab label="Top" icon="🏆" active={activeTab === "rank"} onClick={() => setActiveTab("rank")} />
                 </div>
-            </header>
-        ) : (
-            <div className="p-4 text-center text-zinc-500 border border-dashed border-zinc-700 rounded mb-4">Crie um board acima.</div>
-        )}
 
-        {activeBoard && (
-            <>
-                <div className="flex gap-2 mb-4">
-                  <Tab icon="⏳" active={activeTab === "pending"} onClick={() => setActiveTab("pending")} />
-                  <Tab icon="📝" active={activeTab === "review"} onClick={() => setActiveTab("review")} />
-                  <Tab icon="📊" active={activeTab === "rank"} onClick={() => setActiveTab("rank")} />
+                {/* Lista de Sugestões */}
+                <div className="min-h-[200px]">
+                    <AnimatePresence mode="wait">
+                    {activeTab === "pending" && <Panel key="p" list={pending} onVote={voteInitial} currentUserId={currentUserId} />}
+                    {activeTab === "review" && <Panel key="r" list={review} onVote={voteInitial} onBoost={setConfirmBoost} boosts={activeBoard.boosts || 0} mode="review" currentUserId={currentUserId} />}
+                    {activeTab === "rank" && <Panel key="ra" list={ranked} onVote={voteInitial} onBoost={setConfirmBoost} boosts={activeBoard.boosts || 0} mode="rank" currentUserId={currentUserId} />}
+                    </AnimatePresence>
                 </div>
-                <AnimatePresence mode="wait">
-                  {activeTab === "pending" && <Panel key="p" list={pending} onVote={voteInitial} currentUserId={currentUserId} />}
-                  {activeTab === "review" && <Panel key="r" list={review} onVote={voteInitial} onBoost={setConfirmBoost} boosts={economy[activeBoardId]?.boosts || 0} mode="review" currentUserId={currentUserId} />}
-                  {activeTab === "rank" && <Panel key="ra" list={ranked} onVote={voteInitial} onBoost={setConfirmBoost} boosts={economy[activeBoardId]?.boosts || 0} mode="rank" currentUserId={currentUserId} />}
-                </AnimatePresence>
-                <div className="mt-4 border-t border-zinc-700 pt-3 space-y-2">
-                  <textarea disabled={isArchivedBoard} value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="Sugestão..." className="w-full bg-[#252525] p-2 rounded text-sm text-white h-20 outline-none resize-none" />
-                  <div className="flex gap-2">
-                      <input disabled={isArchivedBoard} type="file" accept="image/*" className="text-xs text-zinc-400" onChange={(e) => e.target.files && setNewImage(URL.createObjectURL(e.target.files[0]))} />
-                      <button disabled={isArchivedBoard} onClick={createSuggestion} className="flex-1 bg-indigo-600 py-1 rounded font-bold text-sm">Enviar</button>
+                
+                {/* Input de Nova Sugestão */}
+                <div className="mt-6 pt-4 border-t border-white/10">
+                  <div className="relative">
+                    <textarea 
+                        disabled={isArchivedBoard} 
+                        value={newText} 
+                        onChange={(e) => setNewText(e.target.value)} 
+                        placeholder="Escreva sua sugestão aqui..." 
+                        className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-sm text-white h-24 outline-none focus:border-indigo-500 focus:bg-black/40 transition-all resize-none mb-3" 
+                    />
+                    <div className="flex justify-between items-center gap-4">
+                        {/* NOTA: Upload de imagem real exige Firebase Storage. 
+                           Desativei temporariamente para evitar erros, pois o URL.createObjectURL só funciona localmente. 
+                        */}
+                        <span className="text-xs text-zinc-500 italic">Imagens (Em breve)</span>
+                        
+                        <button disabled={isArchivedBoard} onClick={createSuggestion} className="btn-primary px-6 py-2">Enviar Sugestão</button>
+                    </div>
                   </div>
                 </div>
-            </>
+
+                {/* Footer Admin */}
+                {isAdmin && (
+                    <div className="mt-4 flex justify-end">
+                        {!isArchivedBoard && <button onClick={() => archiveBoard(activeBoard.id, true)} className="text-xs text-red-400 hover:underline opacity-50 hover:opacity-100">Arquivar Board</button>}
+                        {isArchivedBoard && <button onClick={() => archiveBoard(activeBoard.id, false)} className="text-xs text-emerald-400 hover:underline">Reativar Board</button>}
+                    </div>
+                )}
+            </motion.div>
+        ) : (
+            <div className="card p-8 text-center border-dashed border-2 border-zinc-700">
+                <p className="text-zinc-500">Crie um novo board (+) para começar.</p>
+            </div>
         )}
 
         <AnimatePresence>
@@ -395,18 +453,111 @@ function App() {
   );
 }
 
-// UI Components
-function Tab({ active, onClick, icon }) { return <button onClick={onClick} className={`flex-1 py-2 rounded text-xl ${active ? "bg-[#2b2b2b] text-white" : "bg-[#1a1a1a] text-zinc-500 hover:bg-[#252525]"}`}>{icon}</button>; }
-function Panel({ list, onVote, onBoost, boosts, mode, currentUserId }) { return <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.2 }}>{list.length === 0 && <div className="text-center text-zinc-500 text-sm py-4 border border-zinc-800 rounded">Vazio.</div>}{list.map((s) => <SuggestionCard key={s.id} s={s} onVote={onVote} onBoost={onBoost} boosts={boosts} mode={mode} currentUserId={currentUserId} />)}</motion.div>; }
+// COMPONENTES UI REUTILIZÁVEIS
+function Tab({ active, onClick, icon, label }) { 
+    return (
+        <button 
+            onClick={onClick} 
+            className={`flex-1 py-2 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${active ? "bg-indigo-600 text-white shadow-lg" : "text-zinc-400 hover:bg-white/5 hover:text-white"}`}
+        >
+            <span>{icon}</span>
+            <span className="hidden sm:inline">{label}</span>
+        </button>
+    ); 
+}
+
+function Panel({ list, onVote, onBoost, boosts, mode, currentUserId }) { 
+    return (
+        <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.2 }} className="space-y-4">
+            {list.length === 0 && (
+                <div className="text-center text-zinc-500 py-8 bg-black/10 rounded-lg border border-dashed border-zinc-700">
+                    Nenhuma sugestão aqui por enquanto.
+                </div>
+            )}
+            {list.map((s) => <SuggestionCard key={s.id} s={s} onVote={onVote} onBoost={onBoost} boosts={boosts} mode={mode} currentUserId={currentUserId} />)}
+        </motion.div>
+    ); 
+}
+
 function SuggestionCard({ s, onVote, onBoost, boosts, mode, currentUserId }) {
   const score = scoreFromVotes(s.votes);
   const isAuthor = s.author === currentUserId;
   const boostUsed = userBoostUsed(s.votes, currentUserId);
   const [pulse, setPulse] = useState(false);
-  useEffect(() => { if (s._boosted) { setPulse(true); setTimeout(() => setPulse(false), 400); } }, [s._boosted]);
-  return <motion.div animate={pulse ? { boxShadow: "0 0 0 2px rgba(251,191,36,0.9)", scale: 1.02 } : { scale: 1 }} className={`mb-3 p-3 rounded border space-y-2 relative overflow-hidden ${isAuthor ? "bg-[#2a2438] border-indigo-500/50" : "bg-[#252525] border-zinc-700"}`}>{s.content.text && <div className="text-sm whitespace-pre-wrap">{s.content.text}</div>}{s.content.image && <img src={s.content.image} className="rounded max-h-40 w-full object-cover" />}<div className="flex justify-between items-center mt-2 pt-2 border-t border-white/5"><div className="text-xs font-mono font-bold text-zinc-400">Score: {score}</div><div className="flex gap-2 items-center"><button className="hover:bg-zinc-700 p-1 rounded" onClick={() => onVote && onVote(s.id, 1)} disabled={mode !== "initial" && !onVote}>👍</button><button className="hover:bg-zinc-700 p-1 rounded" onClick={() => onVote && onVote(s.id, 0)} disabled={mode !== "initial" && !onVote}>➖</button><button className="hover:bg-zinc-700 p-1 rounded" onClick={() => onVote && onVote(s.id, -1)} disabled={mode !== "initial" && !onVote}>👎</button>{(mode === "review" || mode === "rank") && boosts > 0 && !boostUsed && ( <button onClick={() => onBoost(s.id)} className="ml-2 text-amber-500 font-bold px-2 hover:bg-amber-600/20 rounded">⚡</button> )}</div></div></motion.div>;
+  
+  useEffect(() => { if (s._boosted) { setPulse(true); setTimeout(() => setPulse(false), 500); } }, [s._boosted]);
+
+  return (
+    <motion.div 
+        animate={pulse ? { scale: 1.02, boxShadow: "0 0 20px rgba(251, 191, 36, 0.5)" } : { scale: 1 }}
+        className={`relative p-4 rounded-xl border transition-all ${isAuthor ? "bg-indigo-900/10 border-indigo-500/30" : "bg-black/20 border-white/5 hover:border-white/10"}`}
+    >
+        <div className="flex justify-between items-start mb-2">
+            <span className="text-xs font-bold text-zinc-500">{s.authorName}</span>
+            <span className="text-[10px] text-zinc-600">{new Date(s.createdAt).toLocaleDateString()}</span>
+        </div>
+
+        {/* Conteúdo */}
+        <div className="flex flex-col gap-3">
+            {s.content.text && <div className="text-sm md:text-base text-zinc-200 whitespace-pre-wrap break-words">{s.content.text}</div>}
+        </div>
+
+        {/* Rodapé do Card */}
+        <div className="flex justify-between items-center mt-4 pt-3 border-t border-white/5">
+            <div className={`text-xs font-mono font-bold px-2 py-1 rounded ${score > 0 ? 'bg-emerald-500/10 text-emerald-400' : score < 0 ? 'bg-red-500/10 text-red-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                Score: {score}
+            </div>
+            
+            <div className="flex gap-2 items-center">
+                {mode === "initial" || onVote ? (
+                    <>
+                    <VoteBtn label="👍" onClick={() => onVote(s.id, 1)} disabled={mode !== "initial"} active={false} />
+                    <VoteBtn label="➖" onClick={() => onVote(s.id, 0)} disabled={mode !== "initial"} active={false} />
+                    <VoteBtn label="👎" onClick={() => onVote(s.id, -1)} disabled={mode !== "initial"} active={false} />
+                    </>
+                ) : null}
+                
+                {(mode === "review" || mode === "rank") && boosts > 0 && !boostUsed && ( 
+                    <button onClick={() => onBoost(s.id)} className="ml-2 bg-amber-500/10 text-amber-500 border border-amber-500/30 font-bold p-2 rounded hover:bg-amber-500 hover:text-black transition-all" title="Dar Boost">
+                        ⚡ Boost
+                    </button> 
+                )}
+                 {(mode === "review" || mode === "rank") && boostUsed && (
+                    <span className="ml-2 text-xs text-amber-500/50 italic">Boost aplicado</span>
+                 )}
+            </div>
+        </div>
+    </motion.div>
+  );
 }
-function ConfirmModal({ onConfirm, onCancel }) { return <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><div className="bg-[#252525] p-6 rounded border border-zinc-600 max-w-xs w-full"><h3 className="text-lg font-bold text-amber-500 mb-2">Usar Boost?</h3><p className="text-sm text-zinc-300 mb-4">Gasta 1 Boost e aumenta o peso do voto.</p><div className="flex gap-2"><button onClick={onCancel} className="flex-1 bg-zinc-700 py-2 rounded">Cancelar</button><button onClick={onConfirm} className="flex-1 bg-amber-600 py-2 rounded text-black font-bold">Confirmar</button></div></div></div>; }
+
+function VoteBtn({ label, onClick, disabled }) {
+    return (
+        <button 
+            className="w-8 h-8 flex items-center justify-center rounded bg-white/5 hover:bg-white/10 border border-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            onClick={onClick}
+            disabled={disabled}
+        >
+            {label}
+        </button>
+    )
+}
+
+function ConfirmModal({ onConfirm, onCancel }) { 
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div initial={{scale: 0.9, opacity: 0}} animate={{scale: 1, opacity: 1}} className="card max-w-xs w-full p-6 text-center border-amber-500/30 shadow-2xl shadow-amber-900/20">
+                <div className="text-4xl mb-2">⚡</div>
+                <h3 className="text-xl font-bold text-amber-500 mb-2">Usar Super Boost?</h3>
+                <p className="text-sm text-zinc-300 mb-6">Isso gastará 1 Boost e aumentará significativamente o peso do seu voto nesta sugestão.</p>
+                <div className="flex gap-3">
+                    <button onClick={onCancel} className="btn-ghost flex-1">Cancelar</button>
+                    <button onClick={onConfirm} className="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-bold py-2 rounded transition-colors">Confirmar</button>
+                </div>
+            </motion.div>
+        </div>
+    ); 
+}
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App />);
