@@ -5,6 +5,15 @@ const { useState, useEffect, useMemo } = React;
 const Motion = window.Motion || { motion: { div: 'div', button: 'button' }, AnimatePresence: ({children}) => children };
 const { motion, AnimatePresence } = Motion;
 
+// COMPONENTE AVATAR (Simplificado: Só Letras)
+function Avatar({ name, size = "w-10 h-10", fontSize = "text-sm" }) {
+    return (
+        <div className={`${size} rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center ${fontSize} font-bold text-white shadow-inner border border-white/10 shrink-0 select-none`}>
+            {name ? name[0].toUpperCase() : "?"}
+        </div>
+    );
+}
+
 // ==========================================
 // TELA 1: AUTENTICAÇÃO
 // ==========================================
@@ -76,8 +85,6 @@ function NicknameScreen({ user, onSave }) {
 // ==========================================
 // APP PRINCIPAL
 // ==========================================
-
-// Helpers
 const scoreFromVotes = (votes) => Object.values(votes || {}).reduce((acc, arr) => acc + arr.reduce((a, b) => a + b, 0), 0);
 const votedCount = (votes, authorId) => Object.keys(votes || {}).filter((uid) => uid !== authorId).length;
 const isUserOnline = (timestamp) => timestamp && (Date.now() - timestamp) < 2 * 60 * 1000;
@@ -86,24 +93,17 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState({ fragmentos: 0, boosts: 0 }); 
   const [authReady, setAuthReady] = useState(false);
-  
-  // Dados
   const [myGroups, setMyGroups] = useState([]); 
   const [activeGroupId, setActiveGroupId] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [groupMembers, setGroupMembers] = useState([]); 
-  
-  // UI
   const [activeTab, setActiveTab] = useState("pending");
   const [newText, setNewText] = useState("");
   const [toast, setToast] = useState(null);
-  
-  // Modais
   const [modalMode, setModalMode] = useState(null); 
   const [modalData, setModalData] = useState({});
-  const [avatarUrlInput, setAvatarUrlInput] = useState(""); // Controle do input de URL
 
-  // --- 0. Checar Convite na URL ---
+  // --- Inicialização ---
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
       const inviteId = params.get("invite");
@@ -113,7 +113,6 @@ function App() {
       }
   }, []);
 
-  // --- 1. Inicialização ---
   useEffect(() => {
     const initAuth = () => {
         if (!window.Firebase) return;
@@ -124,9 +123,7 @@ function App() {
             if (user) {
                 const { db, doc, onSnapshot, updateDoc, arrayUnion } = window.Firebase;
                 const unsubUser = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
-                    if (docSnap.exists()) {
-                        setUserData(prev => ({ ...prev, ...docSnap.data() }));
-                    }
+                    if (docSnap.exists()) setUserData(prev => ({ ...prev, ...docSnap.data() }));
                 });
 
                 if (localStorage.getItem("pendingInvite")) {
@@ -146,13 +143,12 @@ function App() {
     if (window.Firebase) initAuth(); else window.addEventListener('firebase-ready', initAuth);
   }, []);
 
-  // --- Presence ---
   useEffect(() => {
     if (!currentUser || !window.Firebase) return;
     const { db, doc, updateDoc, setDoc } = window.Firebase;
     const heartbeat = async () => {
         const userRef = doc(db, "users", currentUser.uid);
-        const data = { displayName: currentUser.displayName, email: currentUser.email, lastSeen: Date.now(), photoURL: currentUser.photoURL || null };
+        const data = { displayName: currentUser.displayName, email: currentUser.email, lastSeen: Date.now() }; // Removido photoURL
         await setDoc(userRef, data, { merge: true }).catch(() => updateDoc(userRef, data));
     };
     heartbeat();
@@ -160,7 +156,6 @@ function App() {
     return () => clearInterval(interval);
   }, [currentUser]);
 
-  // --- Carregar Grupos ---
   useEffect(() => {
     if (!currentUser || !window.Firebase) return;
     const { db, collection, onSnapshot, query, where } = window.Firebase;
@@ -174,18 +169,11 @@ function App() {
     return () => unsub();
   }, [currentUser]);
 
-  // --- Carregar Dados do Grupo ---
   useEffect(() => {
-    if (!activeGroupId || !window.Firebase) {
-        setSuggestions([]); setGroupMembers([]); return;
-    }
+    if (!activeGroupId || !window.Firebase) { setSuggestions([]); setGroupMembers([]); return; }
     const { db, collection, onSnapshot, query, orderBy, where } = window.Firebase;
-
     const qSug = query(collection(db, "suggestions"), where("groupId", "==", activeGroupId), orderBy("createdAt", "desc"));
-    const unsubSug = onSnapshot(qSug, (snapshot) => {
-        setSuggestions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
+    const unsubSug = onSnapshot(qSug, (snapshot) => setSuggestions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
     const activeGroup = myGroups.find(g => g.id === activeGroupId);
     const memberIds = activeGroup ? activeGroup.members : [];
     const qUsers = query(collection(db, "users")); 
@@ -203,18 +191,11 @@ function App() {
     return () => { unsubSug(); unsubUsers(); };
   }, [activeGroupId, myGroups]);
 
-  // --- Toast ---
-  const showToast = (msg, type = "success") => {
-      setToast({ msg, type });
-      setTimeout(() => setToast(null), 3000);
-  };
-
-  // --- Variáveis ---
+  const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
   const activeGroup = myGroups.find(g => g.id === activeGroupId);
   const currentUserId = currentUser ? currentUser.uid : null;
   const isGroupAdmin = activeGroup?.admins?.includes(currentUserId);
 
-  // --- AÇÕES ---
   const createGroup = async (name) => {
     if (!name.trim()) return;
     const { db, collection, addDoc } = window.Firebase;
@@ -244,12 +225,9 @@ function App() {
   const vote = async (id, value) => {
       const s = suggestions.find(i => i.id === id);
       if (!s || s.author === currentUserId) return;
-      
       const { db, doc, updateDoc } = window.Firebase;
       const newVotes = { ...s.votes, [currentUserId]: [value] };
       await updateDoc(doc(db, "suggestions", id), { votes: newVotes });
-      
-      // Economia Pessoal
       if (!Boolean(s.votes?.[currentUserId]?.length)) {
           const userRef = doc(db, "users", currentUserId);
           let frag = (userData.fragmentos || 0) + 1;
@@ -266,19 +244,15 @@ function App() {
     const { db, doc, updateDoc } = window.Firebase;
     const s = suggestions.find(item => item.id === id);
     if (!s) return;
-    
     const userVotes = s.votes[currentUserId] || [];
     if (userVotes.length > 1) { showToast("Já impulsionou.", "error"); return; }
-
     let appliedValue = 1;
     if (s.author !== currentUserId && userVotes.length > 0) {
         const lastVote = userVotes[userVotes.length - 1];
         if (typeof lastVote === "number") appliedValue = lastVote;
     }
-
     const newVotes = { ...s.votes, [currentUserId]: [...userVotes, appliedValue] };
     await updateDoc(doc(db, "suggestions", id), { votes: newVotes, _boosted: true });
-    
     await updateDoc(doc(db, "users", currentUserId), { boosts: (userData.boosts - 1) });
     showToast("Boost aplicado! ⚡");
   };
@@ -299,24 +273,7 @@ function App() {
       const userSug = suggestions.filter(s => s.author === user.id);
       const totalScore = userSug.reduce((acc, s) => acc + scoreFromVotes(s.votes), 0);
       setModalData({ user: user, stats: { count: userSug.length, score: totalScore }, history: userSug });
-      setAvatarUrlInput(""); // Reseta o input de foto
       setModalMode("profile");
-  };
-
-  // --- ATUALIZAÇÃO DE FOTO (LINK APENAS) ---
-  const handleUpdateAvatar = async (url) => {
-      if(!url.trim()) return;
-      try {
-          await window.Firebase.updateProfile(currentUser, { photoURL: url });
-          const { db, doc, updateDoc } = window.Firebase;
-          await updateDoc(doc(db, "users", currentUser.uid), { photoURL: url });
-          
-          if(modalData.user && modalData.user.id === currentUser.uid) {
-               setModalData(prev => ({...prev, user: {...prev.user, photoURL: url}}));
-          }
-          setCurrentUser({...currentUser, photoURL: url});
-          showToast("Foto atualizada!");
-      } catch(e) { showToast("Erro ao atualizar foto.", "error"); }
   };
 
   const copyInviteLink = () => {
@@ -358,7 +315,7 @@ function App() {
   return (
     <div className="min-h-screen p-2 md:p-6 max-w-6xl mx-auto flex flex-col md:flex-row gap-6">
       
-      {/* SIDEBAR ÚNICA (ESQUERDA) */}
+      {/* SIDEBAR */}
       <div className="md:w-64 flex flex-col gap-4">
           <div className="card p-4">
              <h2 className="text-zinc-400 text-xs font-bold uppercase mb-3">Meus Grupos</h2>
@@ -374,10 +331,8 @@ function App() {
              </div>
           </div>
 
-          <div className="card p-4 flex items-center gap-3 relative cursor-pointer hover:bg-white/5 transition-colors" onClick={() => openProfile({id: currentUser.uid, displayName: currentUser.displayName, photoURL: currentUser.photoURL})}>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-lg font-bold overflow-hidden border-2 border-transparent hover:border-white transition-all">
-                  {currentUser.photoURL ? <img src={currentUser.photoURL} alt="Avatar" className="w-full h-full object-cover" /> : currentUser.displayName[0]}
-              </div>
+          <div className="card p-4 flex items-center gap-3 relative cursor-pointer hover:bg-white/5 transition-colors" onClick={() => openProfile({id: currentUser.uid, displayName: currentUser.displayName})}>
+              <Avatar name={currentUser.displayName} size="w-10 h-10" />
               <div className="flex-1 overflow-hidden">
                   <div className="text-sm font-bold truncate">{currentUser.displayName}</div>
                   <div className="text-[10px] text-zinc-500">Ver meu perfil</div>
@@ -394,9 +349,7 @@ function App() {
                         return (
                             <div key={u.id} className="group flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors cursor-pointer">
                                 <div className="relative" onClick={() => openProfile(u)}>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold overflow-hidden ${isAdmin ? 'bg-amber-500/20 text-amber-500 ring-1 ring-amber-500/50' : 'bg-zinc-700 text-zinc-300'}`}>
-                                        {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover"/> : u.displayName[0]}
-                                    </div>
+                                    <Avatar name={u.displayName} size="w-8 h-8" fontSize="text-xs" />
                                     <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#1e1e1e] ${isOnline ? 'bg-emerald-500' : 'bg-zinc-600'}`}></span>
                                 </div>
                                 <div className="flex-1 min-w-0" onClick={() => openProfile(u)}>
@@ -417,7 +370,7 @@ function App() {
           )}
       </div>
 
-      {/* ÁREA CENTRAL */}
+      {/* FEED */}
       <div className="flex-1 min-w-0 flex flex-col gap-4">
         {activeGroup ? (
             <motion.div key={activeGroupId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-0 overflow-hidden flex flex-col h-full min-h-[500px]">
@@ -460,7 +413,7 @@ function App() {
                             onDelete={(id) => { setModalMode("delete"); setModalData({id}); }}
                             onReport={(id) => { setModalMode("report"); setModalData({id}); }}
                             onDismiss={(id) => dismissReports(id)}
-                            onProfileClick={(uid, name) => openProfile({id: uid, displayName: name, photoURL: groupMembers.find(m=>m.id===uid)?.photoURL})}
+                            onProfileClick={(uid, name) => openProfile({id: uid, displayName: name})}
                             userHasBoosts={(userData.boosts || 0) > 0}
                         />
                     ))}
@@ -495,26 +448,15 @@ function App() {
         {modalMode === "promote" && <Modal title="Promover" onClose={() => setModalMode(null)}> <p className="mb-4 text-center">Tornar <b>{modalData.name}</b> Admin?</p> <div className="flex gap-2"><button onClick={() => setModalMode(null)} className="flex-1 btn-ghost">Não</button><button onClick={() => manageMember("promote", modalData.id)} className="flex-1 bg-emerald-500 text-black font-bold rounded p-2">Sim</button></div> </Modal>}
         {modalMode === "kick" && <Modal title="Banir" onClose={() => setModalMode(null)}> <p className="mb-4 text-center">Remover <b>{modalData.name}</b>?</p> <div className="flex gap-2"><button onClick={() => setModalMode(null)} className="flex-1 btn-ghost">Não</button><button onClick={() => manageMember("kick", modalData.id)} className="flex-1 bg-red-500 text-black font-bold rounded p-2">Sim</button></div> </Modal>}
 
-        {/* MODAL DE PERFIL (COM INPUT DE LINK) */}
+        {/* MODAL DE PERFIL (SEM OPÇÃO DE FOTO) */}
         {modalMode === "profile" && (
             <Modal title="Perfil" onClose={() => setModalMode(null)}>
                 <div className="text-center mb-6">
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-3xl font-bold mx-auto mb-3 border-4 border-[#252525] overflow-hidden relative group">
-                        {modalData.user.photoURL ? <img src={modalData.user.photoURL} className="w-full h-full object-cover"/> : modalData.user.displayName[0]}
+                    <div className="w-24 h-24 mx-auto mb-3">
+                        <Avatar name={modalData.user.displayName} size="w-24 h-24" fontSize="text-3xl" />
                     </div>
                     
-                    {/* Botão de Editar Foto (DENTRO DO MODAL - LINK) */}
-                    {modalData.user.id === currentUser.uid && (
-                        <div className="mb-4">
-                            <button onClick={() => setAvatarUrlInput(old => old ? "" : "open")} className="text-xs bg-white/5 hover:bg-white/10 px-3 py-1 rounded-full text-zinc-400 transition-colors">✏️ Alterar Foto</button>
-                            {avatarUrlInput === "open" && (
-                                <form onSubmit={(e) => { e.preventDefault(); handleUpdateAvatar(e.target.url.value); }} className="mt-2 animate-in fade-in slide-in-from-top-2">
-                                    <input name="url" autoFocus className="input-neon text-xs p-2 mb-2 w-full" placeholder="Cole o link (https://...)" required />
-                                    <button className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold w-full py-1 rounded">Salvar</button>
-                                </form>
-                            )}
-                        </div>
-                    )}
+                    {/* Botões de foto REMOVIDOS daqui */}
 
                     <h2 className="text-xl font-bold">{modalData.user.displayName}</h2>
                 </div>
@@ -546,7 +488,6 @@ function App() {
 }
 
 // ===================== COMPONENTES VISUAIS =====================
-
 function SuggestionCard({ s, currentUserId, isGroupAdmin, onVote, onBoost, onDelete, onReport, onDismiss, onProfileClick, userHasBoosts }) {
     const score = scoreFromVotes(s.votes);
     const isAuthor = s.author === currentUserId;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boards de Sugestão</title>
+    <title>Boards Sugestões</title>
     
     <link rel="stylesheet" href="stilus.css">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -42,7 +42,7 @@
             setDoc
         } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        // --- SUAS CREDENCIAIS REAIS ---
+        // SUAS CREDENCIAIS
         const firebaseConfig = {
             apiKey: "AIzaSyD4mGdpoBaPX8he1gZ17nYX-0W3D_FPXdA",
             authDomain: "pontes-4443d.firebaseapp.com",
@@ -53,7 +53,7 @@
             measurementId: "G-05M2ME9DK6"
         };
 
-        // Inicializa Firebase (SEM STORAGE)
+        // Inicializa Firebase
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
         const auth = getAuth(app);
@@ -72,7 +72,7 @@
         };
 
         window.dispatchEvent(new Event('firebase-ready'));
-        console.log("Firebase conectado (Auth + Firestore).");
+        console.log("Firebase conectado (Apenas Texto).");
     </script>
 </head>
 <body>
