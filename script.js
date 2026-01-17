@@ -1,11 +1,11 @@
 // ==========================================
 // CONFIGURAÇÃO E DEPENDÊNCIAS
 // ==========================================
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useRef } = React;
 const Motion = window.Motion || { motion: { div: 'div', button: 'button' }, AnimatePresence: ({children}) => children };
 const { motion, AnimatePresence } = Motion;
 
-// COMPONENTE AVATAR (Simplificado: Só Letras)
+// COMPONENTE AVATAR SIMPLES
 function Avatar({ name, size = "w-10 h-10", fontSize = "text-sm" }) {
     return (
         <div className={`${size} rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center ${fontSize} font-bold text-white shadow-inner border border-white/10 shrink-0 select-none`}>
@@ -35,9 +35,9 @@ function AuthScreen() {
     } catch (err) {
       console.error(err);
       let msg = "Erro ao conectar.";
-      if (err.code === "auth/invalid-credential") msg = "E-mail ou senha errados.";
-      if (err.code === "auth/email-already-in-use") msg = "E-mail já está em uso.";
-      if (err.code === "auth/weak-password") msg = "Senha fraca (min 6 caracteres).";
+      if (err.code === "auth/invalid-credential") msg = "Dados incorretos.";
+      if (err.code === "auth/email-already-in-use") msg = "E-mail já em uso.";
+      if (err.code === "auth/weak-password") msg = "Senha muito fraca.";
       setError(msg);
     } finally { setLoading(false); }
   };
@@ -86,24 +86,31 @@ function NicknameScreen({ user, onSave }) {
 // APP PRINCIPAL
 // ==========================================
 const scoreFromVotes = (votes) => Object.values(votes || {}).reduce((acc, arr) => acc + arr.reduce((a, b) => a + b, 0), 0);
-const votedCount = (votes, authorId) => Object.keys(votes || {}).filter((uid) => uid !== authorId).length;
 const isUserOnline = (timestamp) => timestamp && (Date.now() - timestamp) < 2 * 60 * 1000;
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState({ fragmentos: 0, boosts: 0 }); 
   const [authReady, setAuthReady] = useState(false);
+  
+  // Dados
   const [myGroups, setMyGroups] = useState([]); 
   const [activeGroupId, setActiveGroupId] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [groupMembers, setGroupMembers] = useState([]); 
-  const [activeTab, setActiveTab] = useState("pending");
+  
+  // UI States
+  const [activeTab, setActiveTab] = useState("all"); 
   const [newText, setNewText] = useState("");
   const [toast, setToast] = useState(null);
   const [modalMode, setModalMode] = useState(null); 
   const [modalData, setModalData] = useState({});
+  
+  // Sidebar & Menu
+  const [isMenuOpen, setIsMenuOpen] = useState(true); 
+  const [showKebabMenu, setShowKebabMenu] = useState(false); 
 
-  // --- Inicialização ---
+  // Inicialização
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
       const inviteId = params.get("invite");
@@ -119,13 +126,11 @@ function App() {
         window.Firebase.onAuthStateChanged(window.Firebase.auth, async (user) => {
             setCurrentUser(user || null);
             setAuthReady(true);
-            
             if (user) {
                 const { db, doc, onSnapshot, updateDoc, arrayUnion } = window.Firebase;
                 const unsubUser = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
                     if (docSnap.exists()) setUserData(prev => ({ ...prev, ...docSnap.data() }));
                 });
-
                 if (localStorage.getItem("pendingInvite")) {
                     const inviteId = localStorage.getItem("pendingInvite");
                     localStorage.removeItem("pendingInvite");
@@ -143,12 +148,13 @@ function App() {
     if (window.Firebase) initAuth(); else window.addEventListener('firebase-ready', initAuth);
   }, []);
 
+  // Presença
   useEffect(() => {
     if (!currentUser || !window.Firebase) return;
     const { db, doc, updateDoc, setDoc } = window.Firebase;
     const heartbeat = async () => {
         const userRef = doc(db, "users", currentUser.uid);
-        const data = { displayName: currentUser.displayName, email: currentUser.email, lastSeen: Date.now() }; // Removido photoURL
+        const data = { displayName: currentUser.displayName, email: currentUser.email, lastSeen: Date.now() };
         await setDoc(userRef, data, { merge: true }).catch(() => updateDoc(userRef, data));
     };
     heartbeat();
@@ -156,6 +162,7 @@ function App() {
     return () => clearInterval(interval);
   }, [currentUser]);
 
+  // Carregar Grupos
   useEffect(() => {
     if (!currentUser || !window.Firebase) return;
     const { db, collection, onSnapshot, query, where } = window.Firebase;
@@ -169,11 +176,18 @@ function App() {
     return () => unsub();
   }, [currentUser]);
 
+  // Carregar Dados do Grupo Ativo
   useEffect(() => {
     if (!activeGroupId || !window.Firebase) { setSuggestions([]); setGroupMembers([]); return; }
     const { db, collection, onSnapshot, query, orderBy, where } = window.Firebase;
-    const qSug = query(collection(db, "suggestions"), where("groupId", "==", activeGroupId), orderBy("createdAt", "desc"));
-    const unsubSug = onSnapshot(qSug, (snapshot) => setSuggestions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+    
+    const qSug = query(collection(db, "suggestions"), where("groupId", "==", activeGroupId));
+    const unsubSug = onSnapshot(qSug, (snapshot) => {
+        let list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        list.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setSuggestions(list);
+    });
+
     const activeGroup = myGroups.find(g => g.id === activeGroupId);
     const memberIds = activeGroup ? activeGroup.members : [];
     const qUsers = query(collection(db, "users")); 
@@ -192,9 +206,19 @@ function App() {
   }, [activeGroupId, myGroups]);
 
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+  
   const activeGroup = myGroups.find(g => g.id === activeGroupId);
   const currentUserId = currentUser ? currentUser.uid : null;
   const isGroupAdmin = activeGroup?.admins?.includes(currentUserId);
+
+  const getFilteredSuggestions = () => {
+      let list = [...suggestions];
+      if (activeTab === "all") return list;
+      if (activeTab === "mine") return list.filter(s => s.author === currentUserId);
+      if (activeTab === "rank") return list.sort((a, b) => scoreFromVotes(b.votes) - scoreFromVotes(a.votes));
+      return list;
+  };
+  const displayList = getFilteredSuggestions();
 
   const createGroup = async (name) => {
     if (!name.trim()) return;
@@ -280,6 +304,7 @@ function App() {
       const url = `${window.location.origin}${window.location.pathname}?invite=${activeGroupId}`;
       navigator.clipboard.writeText(url);
       showToast("Link copiado!");
+      setShowKebabMenu(false);
   }
 
   const manageMember = async (action, targetId) => {
@@ -302,11 +327,8 @@ function App() {
       const groupRef = doc(db, "groups", activeGroupId);
       await updateDoc(groupRef, { members: arrayRemove(currentUserId), admins: arrayRemove(currentUserId) });
       setActiveGroupId(null); setModalMode(null); showToast("Saiu do grupo.");
+      setShowKebabMenu(false);
   };
-
-  const pending = suggestions.filter((s) => !Boolean(s.votes?.[currentUserId]?.length) && s.author !== currentUserId);
-  const review = suggestions.filter((s) => Boolean(s.votes?.[currentUserId]?.length) || s.author === currentUserId);
-  const ranked = suggestions.filter((s) => Object.keys(s.votes || {}).filter(uid => uid !== s.author).length >= 1).sort((a, b) => scoreFromVotes(b.votes) - scoreFromVotes(a.votes));
 
   if (!authReady) return <div className="h-screen flex items-center justify-center text-zinc-500">Conectando...</div>;
   if (!currentUser) return <AuthScreen />;
@@ -315,99 +337,152 @@ function App() {
   return (
     <div className="min-h-screen p-2 md:p-6 max-w-6xl mx-auto flex flex-col md:flex-row gap-6">
       
-      {/* SIDEBAR */}
+      {/* ================= SIDEBAR (COM ANIMAÇÃO VERTICAL) ================= */}
       <div className="md:w-64 flex flex-col gap-4">
-          <div className="card p-4">
-             <h2 className="text-zinc-400 text-xs font-bold uppercase mb-3">Meus Grupos</h2>
-             <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto scrollbar-thin">
-                 {myGroups.map(g => (
-                     <button key={g.id} onClick={() => setActiveGroupId(g.id)} className={`text-left px-3 py-2 rounded-lg text-sm transition-all truncate ${activeGroupId === g.id ? "bg-indigo-600 text-white shadow-lg" : "hover:bg-white/5 text-zinc-400"}`}> {g.name} </button>
-                 ))}
-                 {myGroups.length === 0 && <span className="text-xs text-zinc-600 italic p-2">Sem grupos.</span>}
-             </div>
-             <div className="mt-4 grid grid-cols-2 gap-2">
-                 <button onClick={() => setModalMode("create_group")} className="btn-primary text-xs py-2 px-1">Novo</button>
-                 <button onClick={() => setModalMode("join_group")} className="bg-zinc-700 hover:bg-zinc-600 text-white text-xs py-2 px-1 rounded-lg">Entrar</button>
-             </div>
-          </div>
-
-          <div className="card p-4 flex items-center gap-3 relative cursor-pointer hover:bg-white/5 transition-colors" onClick={() => openProfile({id: currentUser.uid, displayName: currentUser.displayName})}>
-              <Avatar name={currentUser.displayName} size="w-10 h-10" />
-              <div className="flex-1 overflow-hidden">
-                  <div className="text-sm font-bold truncate">{currentUser.displayName}</div>
-                  <div className="text-[10px] text-zinc-500">Ver meu perfil</div>
+          
+          {/* 1. PERFIL (SEMPRE VISÍVEL) */}
+          <div className="card p-4 flex items-center justify-between gap-2 relative bg-[#1e1e1e] border-indigo-500/20 z-20">
+              <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity flex-1 min-w-0" onClick={() => openProfile({id: currentUser.uid, displayName: currentUser.displayName})}>
+                  <Avatar name={currentUser.displayName} size="w-10 h-10" />
+                  <div className="flex-1 overflow-hidden">
+                      <div className="text-sm font-bold truncate">{currentUser.displayName}</div>
+                      <div className="text-[10px] text-zinc-500">Ver Perfil</div>
+                  </div>
               </div>
+              
+              {/* BOTÃO DE EXPANDIR/RECOLHER */}
+              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-zinc-500 hover:text-white p-2 rounded hover:bg-white/10 transition-colors" title={isMenuOpen ? "Recolher Menu" : "Expandir Menu"}>
+                  {isMenuOpen ? "▲" : "▼"}
+              </button>
           </div>
 
-          {activeGroup && (
-            <div className="card p-4 flex flex-col gap-2 flex-1 min-h-[200px]">
-                <h2 className="text-zinc-400 text-xs font-bold uppercase mb-2">Membros ({groupMembers.length})</h2>
-                <div className="flex-1 overflow-y-auto scrollbar-thin space-y-1 max-h-[300px]">
-                    {groupMembers.map(u => {
-                        const isOnline = isUserOnline(u.lastSeen);
-                        const isAdmin = activeGroup.admins?.includes(u.id);
-                        return (
-                            <div key={u.id} className="group flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors cursor-pointer">
-                                <div className="relative" onClick={() => openProfile(u)}>
-                                    <Avatar name={u.displayName} size="w-8 h-8" fontSize="text-xs" />
-                                    <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#1e1e1e] ${isOnline ? 'bg-emerald-500' : 'bg-zinc-600'}`}></span>
-                                </div>
-                                <div className="flex-1 min-w-0" onClick={() => openProfile(u)}>
-                                    <div className="text-sm font-medium truncate flex items-center gap-1">{u.displayName} {isAdmin && <span className="text-[10px]">👑</span>}</div>
-                                    <div className="text-[10px] text-zinc-500">{isOnline ? 'Online' : 'Offline'}</div>
-                                </div>
-                                {isGroupAdmin && u.id !== currentUserId && (
-                                    <div className="hidden group-hover:flex gap-1">
-                                        {!isAdmin && <button onClick={() => { setModalMode("promote"); setModalData({id: u.id, name: u.displayName}); }} className="p-1 text-emerald-500 hover:bg-emerald-500/10 rounded">⬆</button>}
-                                        <button onClick={() => { setModalMode("kick"); setModalData({id: u.id, name: u.displayName}); }} className="p-1 text-red-500 hover:bg-red-500/10 rounded">✕</button>
-                                    </div>
-                                )}
+          {/* 2. ÁREA COLAPSÁVEL (GRUPOS E MEMBROS) */}
+          <AnimatePresence>
+            {isMenuOpen && (
+                <motion.div 
+                    initial={{ height: 0, opacity: 0, y: -20 }} 
+                    animate={{ height: "auto", opacity: 1, y: 0 }} 
+                    exit={{ height: 0, opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                    className="flex flex-col gap-4 overflow-hidden"
+                >
+                    {/* Lista de Grupos */}
+                    <div className="card p-4">
+                        <h2 className="text-zinc-400 text-xs font-bold uppercase mb-3">Meus Grupos</h2>
+                        <div className="flex flex-col gap-2 max-h-[150px] overflow-y-auto scrollbar-thin">
+                            {myGroups.map(g => (
+                                <button key={g.id} onClick={() => setActiveGroupId(g.id)} className={`text-left px-3 py-2 rounded-lg text-sm transition-all truncate ${activeGroupId === g.id ? "bg-indigo-600 text-white shadow-lg" : "hover:bg-white/5 text-zinc-400"}`}> {g.name} </button>
+                            ))}
+                            {myGroups.length === 0 && <span className="text-xs text-zinc-600 italic p-2">Sem grupos.</span>}
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                            <button onClick={() => setModalMode("create_group")} className="btn-primary text-xs py-2 px-1">Novo</button>
+                            <button onClick={() => setModalMode("join_group")} className="bg-zinc-700 hover:bg-zinc-600 text-white text-xs py-2 px-1 rounded-lg">Entrar</button>
+                        </div>
+                    </div>
+
+                    {/* Membros Abaixo */}
+                    {activeGroup && (
+                        <div className="card p-4 flex flex-col gap-2 flex-1 min-h-[200px]">
+                            <h2 className="text-zinc-400 text-xs font-bold uppercase mb-2">Membros ({groupMembers.length})</h2>
+                            <div className="flex-1 overflow-y-auto scrollbar-thin space-y-1 max-h-[300px]">
+                                {groupMembers.map(u => {
+                                    const isOnline = isUserOnline(u.lastSeen);
+                                    const isAdmin = activeGroup.admins?.includes(u.id);
+                                    return (
+                                        <div key={u.id} className="group flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors cursor-pointer">
+                                            <div className="relative" onClick={() => openProfile(u)}>
+                                                <Avatar name={u.displayName} size="w-8 h-8" fontSize="text-xs" />
+                                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#1e1e1e] ${isOnline ? 'bg-emerald-500' : 'bg-zinc-600'}`}></span>
+                                            </div>
+                                            <div className="flex-1 min-w-0" onClick={() => openProfile(u)}>
+                                                <div className="text-sm font-medium truncate flex items-center gap-1">{u.displayName} {isAdmin && <span className="text-[10px]">👑</span>}</div>
+                                                <div className="text-[10px] text-zinc-500">{isOnline ? 'Online' : 'Offline'}</div>
+                                            </div>
+                                            {isGroupAdmin && u.id !== currentUserId && (
+                                                <div className="hidden group-hover:flex gap-1">
+                                                    {!isAdmin && <button onClick={() => { setModalMode("promote"); setModalData({id: u.id, name: u.displayName}); }} className="p-1 text-emerald-500 hover:bg-emerald-500/10 rounded">⬆</button>}
+                                                    <button onClick={() => { setModalMode("kick"); setModalData({id: u.id, name: u.displayName}); }} className="p-1 text-red-500 hover:bg-red-500/10 rounded">✕</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        );
-                    })}
-                </div>
-            </div>
-          )}
+                        </div>
+                    )}
+                </motion.div>
+            )}
+          </AnimatePresence>
       </div>
 
-      {/* FEED */}
+      {/* ================= ÁREA CENTRAL ================= */}
       <div className="flex-1 min-w-0 flex flex-col gap-4">
         {activeGroup ? (
             <motion.div key={activeGroupId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-0 overflow-hidden flex flex-col h-full min-h-[500px]">
-                <div className="p-6 border-b border-white/5 bg-black/20 flex justify-between items-start">
-                    <div>
-                        <h1 className="text-2xl font-bold flex items-center gap-2">
-                            {activeGroup.name}
-                            {isGroupAdmin && <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">ADMIN</span>}
-                        </h1>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs text-zinc-500">ID: {activeGroup.id}</span>
-                            <button onClick={copyInviteLink} className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 rounded hover:bg-emerald-500/20 transition-colors">🔗 LINK CONVITE</button>
+                
+                {/* CABEÇALHO */}
+                <div className="p-6 border-b border-white/5 bg-black/20 relative">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                             <div>
+                                <h1 className="text-2xl font-bold flex items-center gap-2">
+                                    {activeGroup.name}
+                                    {isGroupAdmin && <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">ADMIN</span>}
+                                </h1>
+                                <div className="mt-1 flex flex-col gap-1">
+                                    <span className="text-xs text-zinc-500">ID: {activeGroup.id}</span>
+                                    <div className="flex gap-2 mt-1">
+                                        <div className="bg-black/40 px-2 py-0.5 rounded border border-white/5 flex items-center gap-2" title="Seus Fragmentos">
+                                            <span className="text-[10px] text-zinc-500 font-bold">FRAGS</span>
+                                            <span className="text-emerald-400 font-mono font-bold text-xs">{userData.fragmentos || 0}/10</span>
+                                        </div>
+                                        <div className="bg-black/40 px-2 py-0.5 rounded border border-white/5 flex items-center gap-2" title="Seus Boosts">
+                                            <span className="text-[10px] text-zinc-500 font-bold">BOOSTS</span>
+                                            <span className="text-amber-400 font-mono font-bold text-xs">⚡ {userData.boosts || 0}</span>
+                                        </div>
+                                        {/* BOTÃO DE INFORMAÇÕES (?) */}
+                                        <button
+                                            onClick={() => setModalMode("info")}
+                                            className="w-5 h-5 mt-0.5 rounded-full bg-zinc-700 text-zinc-400 text-[10px] font-bold flex items-center justify-center hover:bg-zinc-600 hover:text-white transition-colors"
+                                            title="Informações"
+                                        >
+                                            ?
+                                        </button>
+                                    </div>
+                                </div>
+                             </div>
                         </div>
-                    </div>
-                    <div className="flex gap-2">
-                         <div className="bg-black/40 px-3 py-1 rounded text-center border border-white/5" title="Seus Fragmentos">
-                            <div className="text-[10px] text-zinc-500 font-bold">FRAGMENTOS</div>
-                            <div className="text-emerald-400 font-mono font-bold">{userData.fragmentos || 0}/10</div>
-                         </div>
-                         <div className="bg-black/40 px-3 py-1 rounded text-center border border-white/5" title="Seus Boosts">
-                            <div className="text-[10px] text-zinc-500 font-bold">BOOSTS</div>
-                            <div className="text-amber-400 font-mono font-bold">⚡ {userData.boosts || 0}</div>
-                         </div>
-                         <button onClick={() => setModalMode("leave_confirm")} className="text-zinc-500 hover:text-red-500 p-2" title="Sair">🚪</button>
+
+                        {/* Menu de 3 Pontinhos */}
+                        <div className="relative">
+                            <button onClick={() => setShowKebabMenu(!showKebabMenu)} className="text-zinc-400 hover:text-white p-2 rounded-full hover:bg-white/5 text-xl">
+                                ⋮
+                            </button>
+                            {showKebabMenu && (
+                                <div className="absolute right-0 top-10 bg-[#2d2d30] border border-white/10 rounded-lg shadow-xl w-40 z-50 overflow-hidden">
+                                    <button onClick={copyInviteLink} className="w-full text-left px-4 py-3 text-sm text-zinc-300 hover:bg-white/5 hover:text-white">🔗 Copiar Convite</button>
+                                    <button onClick={() => setModalMode("leave_confirm")} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-500/10">🚪 Sair do Grupo</button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 
+                {/* ABAS */}
                 <div className="flex border-b border-white/5">
-                  <Tab label="Votar" active={activeTab === "pending"} onClick={() => setActiveTab("pending")} />
-                  <Tab label="Meus" active={activeTab === "review"} onClick={() => setActiveTab("review")} />
+                  <Tab label="Votar" active={activeTab === "all"} onClick={() => setActiveTab("all")} />
+                  <Tab label="Meus" active={activeTab === "mine"} onClick={() => setActiveTab("mine")} />
                   <Tab label="Ranking" active={activeTab === "rank"} onClick={() => setActiveTab("rank")} />
                 </div>
 
+                {/* LISTA DE SUGESTÕES */}
                 <div className="flex-1 p-4 overflow-y-auto bg-black/10 space-y-4">
-                    {((activeTab === "pending" ? pending : activeTab === "review" ? review : ranked)).length === 0 && <div className="text-center py-10 text-zinc-500">Vazio.</div>}
-                    {((activeTab === "pending" ? pending : activeTab === "review" ? review : ranked)).map(s => (
-                        <SuggestionCard key={s.id} s={s} currentUserId={currentUserId} isGroupAdmin={isGroupAdmin} 
+                    {displayList.length === 0 && <div className="text-center py-10 text-zinc-500">Nenhuma sugestão aqui.</div>}
+                    {displayList.map((s, index) => (
+                        <SuggestionCard key={s.id} s={s} 
+                            rankIndex={activeTab === "rank" ? index : null} 
+                            currentUserId={currentUserId} isGroupAdmin={isGroupAdmin} 
                             onVote={(id, v) => vote(id, v)}
                             onBoost={applyBoost}
                             onDelete={(id) => { setModalMode("delete"); setModalData({id}); }}
@@ -448,16 +523,37 @@ function App() {
         {modalMode === "promote" && <Modal title="Promover" onClose={() => setModalMode(null)}> <p className="mb-4 text-center">Tornar <b>{modalData.name}</b> Admin?</p> <div className="flex gap-2"><button onClick={() => setModalMode(null)} className="flex-1 btn-ghost">Não</button><button onClick={() => manageMember("promote", modalData.id)} className="flex-1 bg-emerald-500 text-black font-bold rounded p-2">Sim</button></div> </Modal>}
         {modalMode === "kick" && <Modal title="Banir" onClose={() => setModalMode(null)}> <p className="mb-4 text-center">Remover <b>{modalData.name}</b>?</p> <div className="flex gap-2"><button onClick={() => setModalMode(null)} className="flex-1 btn-ghost">Não</button><button onClick={() => manageMember("kick", modalData.id)} className="flex-1 bg-red-500 text-black font-bold rounded p-2">Sim</button></div> </Modal>}
 
-        {/* MODAL DE PERFIL (SEM OPÇÃO DE FOTO) */}
+        {/* MODAL DE INFORMAÇÕES (NOVO) */}
+        {modalMode === "info" && (
+            <Modal title="Como funciona?" onClose={() => setModalMode(null)}>
+                <div className="space-y-4 text-sm text-zinc-300">
+                    <div className="p-3 bg-black/20 rounded border border-white/5">
+                        <h3 className="text-emerald-400 font-bold mb-1 flex items-center gap-2">
+                            💎 Fragmentos
+                        </h3>
+                        <p>
+                            A cada voto que você dê a sugestões, irá acumular 1 de fragmentos no total de 10, com isso ganhará 1 ponto de boost.
+                        </p>
+                    </div>
+
+                    <div className="p-3 bg-black/20 rounded border border-white/5">
+                        <h3 className="text-amber-400 font-bold mb-1 flex items-center gap-2">
+                            ⚡ Boost
+                        </h3>
+                        <p>
+                            Ao usar 1 Boost, você impulsiona seu voto.
+                        </p>
+                    </div>
+                </div>
+            </Modal>
+        )}
+
         {modalMode === "profile" && (
             <Modal title="Perfil" onClose={() => setModalMode(null)}>
                 <div className="text-center mb-6">
                     <div className="w-24 h-24 mx-auto mb-3">
                         <Avatar name={modalData.user.displayName} size="w-24 h-24" fontSize="text-3xl" />
                     </div>
-                    
-                    {/* Botões de foto REMOVIDOS daqui */}
-
                     <h2 className="text-xl font-bold">{modalData.user.displayName}</h2>
                 </div>
                 
@@ -488,7 +584,7 @@ function App() {
 }
 
 // ===================== COMPONENTES VISUAIS =====================
-function SuggestionCard({ s, currentUserId, isGroupAdmin, onVote, onBoost, onDelete, onReport, onDismiss, onProfileClick, userHasBoosts }) {
+function SuggestionCard({ s, rankIndex, currentUserId, isGroupAdmin, onVote, onBoost, onDelete, onReport, onDismiss, onProfileClick, userHasBoosts }) {
     const score = scoreFromVotes(s.votes);
     const isAuthor = s.author === currentUserId;
     const canDelete = isAuthor || isGroupAdmin; 
@@ -497,13 +593,21 @@ function SuggestionCard({ s, currentUserId, isGroupAdmin, onVote, onBoost, onDel
     const hasVoted = userVotes.length > 0;
     const boostUsed = userVotes.length > 1;
 
+    let rankBadge = null;
+    if (rankIndex !== null) {
+        if (rankIndex === 0) rankBadge = <span className="absolute -top-2 -left-2 bg-yellow-400 text-black font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg border-2 border-yellow-200 z-10">1º</span>;
+        else if (rankIndex === 1) rankBadge = <span className="absolute -top-2 -left-2 bg-zinc-300 text-black font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg border-2 border-zinc-100 z-10">2º</span>;
+        else if (rankIndex === 2) rankBadge = <span className="absolute -top-2 -left-2 bg-amber-700 text-white font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg border-2 border-amber-500 z-10">3º</span>;
+        else rankBadge = <span className="absolute -top-2 -left-2 bg-black/50 text-zinc-400 text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border border-white/10">{rankIndex + 1}º</span>;
+    }
+
     return (
         <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className={`relative p-4 rounded-xl border ${isAuthor ? "bg-indigo-900/10 border-indigo-500/30" : "bg-[#252525] border-white/5"} ${isGroupAdmin && reportCount > 0 ? "border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]" : ""}`}>
-            <div className="flex justify-between items-start mb-2">
+            {rankBadge}
+            <div className="mb-2 pl-2">
                 <span onClick={() => onProfileClick(s.author, s.authorName)} className="text-xs font-bold text-zinc-400 hover:text-indigo-400 hover:underline cursor-pointer transition-colors">{s.authorName}</span>
-                <span className="text-[10px] text-zinc-600">{new Date(s.createdAt).toLocaleDateString()}</span>
             </div>
-            <p className="text-sm text-zinc-200 whitespace-pre-wrap mb-3">{s.content.text}</p>
+            <p className="text-sm text-zinc-200 whitespace-pre-wrap mb-3 pl-2">{s.content.text}</p>
             {isGroupAdmin && reportCount > 0 && (
                 <div className="bg-red-500/10 border border-red-500/20 p-2 rounded mb-3">
                     <div className="text-xs font-bold text-red-400 mb-1">⚠️ {reportCount} Denúncia(s):</div>
@@ -515,7 +619,10 @@ function SuggestionCard({ s, currentUserId, isGroupAdmin, onVote, onBoost, onDel
                 </div>
             )}
             <div className="flex justify-between items-center border-t border-white/5 pt-2">
-                <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${score > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}>{score} pts</span>
+                <div className="flex items-center gap-2">
+                    <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${score > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}>{score} pts</span>
+                    <span className="text-[10px] text-zinc-600">{new Date(s.createdAt).toLocaleDateString()}</span>
+                </div>
                 <div className="flex gap-1 items-center">
                     <button onClick={() => onVote(s.id, 1)} className="w-8 h-8 flex items-center justify-center rounded hover:bg-white/10">👍</button>
                     <button onClick={() => onVote(s.id, -1)} className="w-8 h-8 flex items-center justify-center rounded hover:bg-white/10">👎</button>
@@ -526,7 +633,7 @@ function SuggestionCard({ s, currentUserId, isGroupAdmin, onVote, onBoost, onDel
                     {!isAuthor && <button onClick={() => onReport(s.id)} className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-500/20 text-zinc-600 hover:text-red-400 transition-colors ml-2" title="Denunciar">🚩</button>}
                 </div>
             </div>
-            {canDelete && (!isGroupAdmin || reportCount === 0) && <button onClick={() => onDelete(s.id)} className="absolute top-2 right-2 text-zinc-600 hover:text-red-500 p-1">🗑️</button>}
+            {canDelete && (!isGroupAdmin || reportCount === 0) && <button onClick={() => onDelete(s.id)} className="absolute top-2 right-2 text-zinc-600 hover:text-red-500 p-1 font-bold text-lg leading-none">✕</button>}
         </motion.div>
     );
 }
