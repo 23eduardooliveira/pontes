@@ -15,6 +15,39 @@ function Avatar({ name, size = "w-10 h-10", fontSize = "text-sm" }) {
 }
 
 // ==========================================
+// LÓGICA DE PONTUAÇÃO (COM VOTO NEUTRO)
+// ==========================================
+const scoreFromVotes = (votes) => {
+    if (!votes) return 0;
+
+    let rawScore = 0;     // Pontuação bruta (Soma de positivos e negativos)
+    let neutralPower = 0; // Quantidade de "poder" neutro
+
+    Object.values(votes).forEach(voteArr => {
+        const primaryVote = voteArr[0];
+
+        if (primaryVote === 0) {
+            // É neutro. Conta como 1 de poder de anulação (ou mais se tiver boost)
+            neutralPower += voteArr.length; 
+        } else {
+            // É positivo ou negativo. Soma o valor total
+            rawScore += voteArr.reduce((a, b) => a + b, 0);
+        }
+    });
+
+    // Lógica do "Amortecedor"
+    if (rawScore > 0) {
+        return Math.max(0, rawScore - neutralPower);
+    } else if (rawScore < 0) {
+        return Math.min(0, rawScore + neutralPower);
+    } else {
+        return 0;
+    }
+};
+
+const isUserOnline = (timestamp) => timestamp && (Date.now() - timestamp) < 2 * 60 * 1000;
+
+// ==========================================
 // TELA 1: AUTENTICAÇÃO
 // ==========================================
 function AuthScreen() {
@@ -85,9 +118,6 @@ function NicknameScreen({ user, onSave }) {
 // ==========================================
 // APP PRINCIPAL
 // ==========================================
-const scoreFromVotes = (votes) => Object.values(votes || {}).reduce((acc, arr) => acc + arr.reduce((a, b) => a + b, 0), 0);
-const isUserOnline = (timestamp) => timestamp && (Date.now() - timestamp) < 2 * 60 * 1000;
-
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState({ fragmentos: 0, boosts: 0 }); 
@@ -211,11 +241,28 @@ function App() {
   const currentUserId = currentUser ? currentUser.uid : null;
   const isGroupAdmin = activeGroup?.admins?.includes(currentUserId);
 
+  // --- FILTRAGEM E ORDENAÇÃO ---
   const getFilteredSuggestions = () => {
       let list = [...suggestions];
-      if (activeTab === "all") return list;
+      
+      // RANKING COM DESEMPATE POR DATA (Mais antiga ganha)
+      if (activeTab === "rank") {
+          return list.sort((a, b) => {
+              const scoreA = scoreFromVotes(a.votes);
+              const scoreB = scoreFromVotes(b.votes);
+              const diff = scoreB - scoreA; // Maior pontuação primeiro
+
+              // Se a pontuação for diferente, retorna quem tem mais
+              if (diff !== 0) return diff;
+
+              // EMPATE: Quem criou ANTES (data menor) ganha a vantagem
+              return new Date(a.createdAt) - new Date(b.createdAt);
+          });
+      }
+
       if (activeTab === "mine") return list.filter(s => s.author === currentUserId);
-      if (activeTab === "rank") return list.sort((a, b) => scoreFromVotes(b.votes) - scoreFromVotes(a.votes));
+      
+      // "Votar" (Padrão: Mais recentes primeiro)
       return list;
   };
   const displayList = getFilteredSuggestions();
@@ -252,6 +299,8 @@ function App() {
       const { db, doc, updateDoc } = window.Firebase;
       const newVotes = { ...s.votes, [currentUserId]: [value] };
       await updateDoc(doc(db, "suggestions", id), { votes: newVotes });
+      
+      // Lógica de Fragmentos: Ganha 1 fragmento se ainda não votou
       if (!Boolean(s.votes?.[currentUserId]?.length)) {
           const userRef = doc(db, "users", currentUserId);
           let frag = (userData.fragmentos || 0) + 1;
@@ -270,11 +319,13 @@ function App() {
     if (!s) return;
     const userVotes = s.votes[currentUserId] || [];
     if (userVotes.length > 1) { showToast("Já impulsionou.", "error"); return; }
+    
     let appliedValue = 1;
     if (s.author !== currentUserId && userVotes.length > 0) {
         const lastVote = userVotes[userVotes.length - 1];
         if (typeof lastVote === "number") appliedValue = lastVote;
     }
+    
     const newVotes = { ...s.votes, [currentUserId]: [...userVotes, appliedValue] };
     await updateDoc(doc(db, "suggestions", id), { votes: newVotes, _boosted: true });
     await updateDoc(doc(db, "users", currentUserId), { boosts: (userData.boosts - 1) });
@@ -337,10 +388,8 @@ function App() {
   return (
     <div className="min-h-screen p-2 md:p-6 max-w-6xl mx-auto flex flex-col md:flex-row gap-6">
       
-      {/* ================= SIDEBAR (COM ANIMAÇÃO VERTICAL) ================= */}
+      {/* ================= SIDEBAR ================= */}
       <div className="md:w-64 flex flex-col gap-4">
-          
-          {/* 1. PERFIL (SEMPRE VISÍVEL) */}
           <div className="card p-4 flex items-center justify-between gap-2 relative bg-[#1e1e1e] border-indigo-500/20 z-20">
               <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity flex-1 min-w-0" onClick={() => openProfile({id: currentUser.uid, displayName: currentUser.displayName})}>
                   <Avatar name={currentUser.displayName} size="w-10 h-10" />
@@ -349,14 +398,11 @@ function App() {
                       <div className="text-[10px] text-zinc-500">Ver Perfil</div>
                   </div>
               </div>
-              
-              {/* BOTÃO DE EXPANDIR/RECOLHER */}
               <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-zinc-500 hover:text-white p-2 rounded hover:bg-white/10 transition-colors" title={isMenuOpen ? "Recolher Menu" : "Expandir Menu"}>
                   {isMenuOpen ? "▲" : "▼"}
               </button>
           </div>
 
-          {/* 2. ÁREA COLAPSÁVEL (GRUPOS E MEMBROS) */}
           <AnimatePresence>
             {isMenuOpen && (
                 <motion.div 
@@ -366,7 +412,6 @@ function App() {
                     transition={{ duration: 0.3, ease: "easeInOut" }}
                     className="flex flex-col gap-4 overflow-hidden"
                 >
-                    {/* Lista de Grupos */}
                     <div className="card p-4">
                         <h2 className="text-zinc-400 text-xs font-bold uppercase mb-3">Meus Grupos</h2>
                         <div className="flex flex-col gap-2 max-h-[150px] overflow-y-auto scrollbar-thin">
@@ -381,7 +426,6 @@ function App() {
                         </div>
                     </div>
 
-                    {/* Membros Abaixo */}
                     {activeGroup && (
                         <div className="card p-4 flex flex-col gap-2 flex-1 min-h-[200px]">
                             <h2 className="text-zinc-400 text-xs font-bold uppercase mb-2">Membros ({groupMembers.length})</h2>
@@ -421,7 +465,6 @@ function App() {
         {activeGroup ? (
             <motion.div key={activeGroupId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-0 overflow-hidden flex flex-col h-full min-h-[500px]">
                 
-                {/* CABEÇALHO */}
                 <div className="p-6 border-b border-white/5 bg-black/20 relative">
                     <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
@@ -441,24 +484,13 @@ function App() {
                                             <span className="text-[10px] text-zinc-500 font-bold">BOOSTS</span>
                                             <span className="text-amber-400 font-mono font-bold text-xs">⚡ {userData.boosts || 0}</span>
                                         </div>
-                                        {/* BOTÃO DE INFORMAÇÕES (?) */}
-                                        <button
-                                            onClick={() => setModalMode("info")}
-                                            className="w-5 h-5 mt-0.5 rounded-full bg-zinc-700 text-zinc-400 text-[10px] font-bold flex items-center justify-center hover:bg-zinc-600 hover:text-white transition-colors"
-                                            title="Informações"
-                                        >
-                                            ?
-                                        </button>
+                                        <button onClick={() => setModalMode("info")} className="w-5 h-5 mt-0.5 rounded-full bg-zinc-700 text-zinc-400 text-[10px] font-bold flex items-center justify-center hover:bg-zinc-600 hover:text-white transition-colors" title="Informações">?</button>
                                     </div>
                                 </div>
                              </div>
                         </div>
-
-                        {/* Menu de 3 Pontinhos */}
                         <div className="relative">
-                            <button onClick={() => setShowKebabMenu(!showKebabMenu)} className="text-zinc-400 hover:text-white p-2 rounded-full hover:bg-white/5 text-xl">
-                                ⋮
-                            </button>
+                            <button onClick={() => setShowKebabMenu(!showKebabMenu)} className="text-zinc-400 hover:text-white p-2 rounded-full hover:bg-white/5 text-xl">⋮</button>
                             {showKebabMenu && (
                                 <div className="absolute right-0 top-10 bg-[#2d2d30] border border-white/10 rounded-lg shadow-xl w-40 z-50 overflow-hidden">
                                     <button onClick={copyInviteLink} className="w-full text-left px-4 py-3 text-sm text-zinc-300 hover:bg-white/5 hover:text-white">🔗 Copiar Convite</button>
@@ -469,14 +501,12 @@ function App() {
                     </div>
                 </div>
                 
-                {/* ABAS */}
                 <div className="flex border-b border-white/5">
                   <Tab label="Votar" active={activeTab === "all"} onClick={() => setActiveTab("all")} />
                   <Tab label="Meus" active={activeTab === "mine"} onClick={() => setActiveTab("mine")} />
                   <Tab label="Ranking" active={activeTab === "rank"} onClick={() => setActiveTab("rank")} />
                 </div>
 
-                {/* LISTA DE SUGESTÕES */}
                 <div className="flex-1 p-4 overflow-y-auto bg-black/10 space-y-4">
                     {displayList.length === 0 && <div className="text-center py-10 text-zinc-500">Nenhuma sugestão aqui.</div>}
                     {displayList.map((s, index) => (
@@ -523,26 +553,17 @@ function App() {
         {modalMode === "promote" && <Modal title="Promover" onClose={() => setModalMode(null)}> <p className="mb-4 text-center">Tornar <b>{modalData.name}</b> Admin?</p> <div className="flex gap-2"><button onClick={() => setModalMode(null)} className="flex-1 btn-ghost">Não</button><button onClick={() => manageMember("promote", modalData.id)} className="flex-1 bg-emerald-500 text-black font-bold rounded p-2">Sim</button></div> </Modal>}
         {modalMode === "kick" && <Modal title="Banir" onClose={() => setModalMode(null)}> <p className="mb-4 text-center">Remover <b>{modalData.name}</b>?</p> <div className="flex gap-2"><button onClick={() => setModalMode(null)} className="flex-1 btn-ghost">Não</button><button onClick={() => manageMember("kick", modalData.id)} className="flex-1 bg-red-500 text-black font-bold rounded p-2">Sim</button></div> </Modal>}
 
-        {/* MODAL DE INFORMAÇÕES (NOVO) */}
+        {/* MODAL DE INFORMAÇÕES */}
         {modalMode === "info" && (
             <Modal title="Como funciona?" onClose={() => setModalMode(null)}>
                 <div className="space-y-4 text-sm text-zinc-300">
                     <div className="p-3 bg-black/20 rounded border border-white/5">
-                        <h3 className="text-emerald-400 font-bold mb-1 flex items-center gap-2">
-                            💎 Fragmentos
-                        </h3>
-                        <p>
-                            A cada voto que você dê a sugestões, irá acumular 1 de fragmentos no total de 10, com isso ganhará 1 ponto de boost.
-                        </p>
+                        <h3 className="text-emerald-400 font-bold mb-1 flex items-center gap-2">💎 Fragmentos</h3>
+                        <p>A cada voto que você dê a sugestões, irá acumular 1 de fragmentos no total de 10, com isso ganhará 1 ponto de boost.</p>
                     </div>
-
                     <div className="p-3 bg-black/20 rounded border border-white/5">
-                        <h3 className="text-amber-400 font-bold mb-1 flex items-center gap-2">
-                            ⚡ Boost
-                        </h3>
-                        <p>
-                            Ao usar 1 Boost, você impulsiona seu voto.
-                        </p>
+                        <h3 className="text-amber-400 font-bold mb-1 flex items-center gap-2">⚡ Boost</h3>
+                        <p>Ao usar 1 Boost, você impulsiona seu voto.</p>
                     </div>
                 </div>
             </Modal>
@@ -625,6 +646,7 @@ function SuggestionCard({ s, rankIndex, currentUserId, isGroupAdmin, onVote, onB
                 </div>
                 <div className="flex gap-1 items-center">
                     <button onClick={() => onVote(s.id, 1)} className="w-8 h-8 flex items-center justify-center rounded hover:bg-white/10">👍</button>
+                    <button onClick={() => onVote(s.id, 0)} className="w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 text-zinc-400">➖</button>
                     <button onClick={() => onVote(s.id, -1)} className="w-8 h-8 flex items-center justify-center rounded hover:bg-white/10">👎</button>
                     {!isAuthor && hasVoted && !boostUsed && (
                         <button onClick={() => onBoost(s.id)} className={`ml-2 border font-bold p-1 rounded transition-all text-xs ${userHasBoosts ? "bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500 hover:text-black" : "opacity-50 cursor-not-allowed border-zinc-700 text-zinc-500"}`} title={userHasBoosts ? "Dar Boost" : "Sem Boosts"}>⚡ BOOST</button>
