@@ -245,24 +245,18 @@ function App() {
   const getFilteredSuggestions = () => {
       let list = [...suggestions];
       
-      // RANKING COM DESEMPATE POR DATA (Mais antiga ganha)
+      // RANKING COM DESEMPATE POR DATA
       if (activeTab === "rank") {
           return list.sort((a, b) => {
               const scoreA = scoreFromVotes(a.votes);
               const scoreB = scoreFromVotes(b.votes);
-              const diff = scoreB - scoreA; // Maior pontuação primeiro
-
-              // Se a pontuação for diferente, retorna quem tem mais
+              const diff = scoreB - scoreA; 
               if (diff !== 0) return diff;
-
-              // EMPATE: Quem criou ANTES (data menor) ganha a vantagem
               return new Date(a.createdAt) - new Date(b.createdAt);
           });
       }
 
       if (activeTab === "mine") return list.filter(s => s.author === currentUserId);
-      
-      // "Votar" (Padrão: Mais recentes primeiro)
       return list;
   };
   const displayList = getFilteredSuggestions();
@@ -300,7 +294,7 @@ function App() {
       const newVotes = { ...s.votes, [currentUserId]: [value] };
       await updateDoc(doc(db, "suggestions", id), { votes: newVotes });
       
-      // Lógica de Fragmentos: Ganha 1 fragmento se ainda não votou
+      // Lógica de Fragmentos
       if (!Boolean(s.votes?.[currentUserId]?.length)) {
           const userRef = doc(db, "users", currentUserId);
           let frag = (userData.fragmentos || 0) + 1;
@@ -553,17 +547,17 @@ function App() {
         {modalMode === "promote" && <Modal title="Promover" onClose={() => setModalMode(null)}> <p className="mb-4 text-center">Tornar <b>{modalData.name}</b> Admin?</p> <div className="flex gap-2"><button onClick={() => setModalMode(null)} className="flex-1 btn-ghost">Não</button><button onClick={() => manageMember("promote", modalData.id)} className="flex-1 bg-emerald-500 text-black font-bold rounded p-2">Sim</button></div> </Modal>}
         {modalMode === "kick" && <Modal title="Banir" onClose={() => setModalMode(null)}> <p className="mb-4 text-center">Remover <b>{modalData.name}</b>?</p> <div className="flex gap-2"><button onClick={() => setModalMode(null)} className="flex-1 btn-ghost">Não</button><button onClick={() => manageMember("kick", modalData.id)} className="flex-1 bg-red-500 text-black font-bold rounded p-2">Sim</button></div> </Modal>}
 
-        {/* MODAL DE INFORMAÇÕES */}
+        {/* MODAL DE INFORMAÇÕES (ATUALIZADO) */}
         {modalMode === "info" && (
             <Modal title="Como funciona?" onClose={() => setModalMode(null)}>
                 <div className="space-y-4 text-sm text-zinc-300">
                     <div className="p-3 bg-black/20 rounded border border-white/5">
                         <h3 className="text-emerald-400 font-bold mb-1 flex items-center gap-2">💎 Fragmentos</h3>
-                        <p>A cada voto que você dê a sugestões, irá acumular 1 de fragmentos no total de 10, com isso ganhará 1 ponto de boost.</p>
+                        <p>Sempre que votar em uma sugestão, você ganha um fragmento. Ao acumular 10 fragmentos, eles são convertidos em um Boost.</p>
                     </div>
                     <div className="p-3 bg-black/20 rounded border border-white/5">
                         <h3 className="text-amber-400 font-bold mb-1 flex items-center gap-2">⚡ Boost</h3>
-                        <p>Ao usar 1 Boost, você impulsiona seu voto.</p>
+                        <p>Ao usar um Boost, você impulsiona seu voto, dobrando o seu peso no scoore da sugestão.</p>
                     </div>
                 </div>
             </Modal>
